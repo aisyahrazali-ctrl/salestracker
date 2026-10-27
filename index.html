@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Tracker Dashboard — 14 Minggu</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:    #1F4E79;
+      --blue-mid:#2563a8;
+      --blue-lt: #d6e4f0;
+      --gold:    #FFD700;
+      --gold-dk: #c9a800;
+      --white:   #ffffff;
+      --bg:      #f0f4f8;
+      --text:    #1a2536;
+      --muted:   #607080;
+      --green:   #22c55e;
+      --yellow:  #f59e0b;
+      --red:     #ef4444;
+      --sidebar-w: 230px;
+      --navbar-h:  62px;
+      --bottombar-h: 52px;
+    }
+
+    body { font-family: -apple-system,"Segoe UI",system-ui,sans-serif; font-size:14px; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+
+    /* ─── SIDEBAR ─── */
+    #sidebar {
+      position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh;
+      background:var(--blue); display:flex; flex-direction:column;
+      z-index:200; transition:width .25s ease;
+    }
+    #sidebar.collapsed { width:56px; }
+    #sidebar.collapsed .nav-label,
+    #sidebar.collapsed .sidebar-title,
+    #sidebar.collapsed .sidebar-sub { display:none; }
+    #sidebar.collapsed .nav-item { justify-content:center; padding:12px 0; }
+
+    .sidebar-header {
+      padding:18px 16px 14px;
+      border-bottom:1px solid rgba(255,255,255,.15);
+      display:flex; align-items:center; gap:10px;
+    }
+    .sidebar-logo {
+      width:32px; height:32px; background:var(--gold); border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px; font-weight:900; color:var(--blue); flex-shrink:0;
+    }
+    .sidebar-title { color:var(--white); font-size:13px; font-weight:700; line-height:1.3; }
+    .sidebar-sub   { color:rgba(255,255,255,.6); font-size:11px; }
+
+    .sidebar-nav { flex:1; padding:12px 0; overflow-y:auto; }
+    .nav-item {
+      display:flex; align-items:center; gap:12px;
+      padding:11px 18px; cursor:pointer; transition:background .15s;
+      color:rgba(255,255,255,.75); font-size:13.5px; font-weight:500;
+      border-left:3px solid transparent;
+    }
+    .nav-item:hover { background:rgba(255,255,255,.08); color:var(--white); }
+    .nav-item.active { background:rgba(255,215,0,.12); color:var(--gold); border-left-color:var(--gold); }
+    .nav-icon { font-size:17px; flex-shrink:0; width:20px; text-align:center; }
+
+    /* ─── MAIN WRAPPER ─── */
+    #main-wrapper {
+      margin-left:var(--sidebar-w); display:flex; flex-direction:column;
+      height:100vh; transition:margin-left .25s ease;
+    }
+    #main-wrapper.expanded { margin-left:56px; }
+
+    /* ─── TOP NAVBAR ─── */
+    #navbar {
+      height:var(--navbar-h); background:var(--blue);
+      display:flex; align-items:center; gap:14px; padding:0 20px;
+      flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,.25);
+      position:sticky; top:0; z-index:100;
+    }
+    #hamburger {
+      background:none; border:none; color:var(--white); font-size:22px;
+      cursor:pointer; padding:4px 6px; border-radius:6px; line-height:1;
+      flex-shrink:0;
+    }
+    #hamburger:hover { background:rgba(255,255,255,.15); }
+    .navbar-title { color:var(--white); font-size:15px; font-weight:700; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .navbar-sub   { color:var(--gold); font-size:11px; font-weight:600; }
+    .navbar-date  { color:rgba(255,255,255,.65); font-size:11.5px; white-space:nowrap; flex-shrink:0; }
+
+    /* SEARCH BAR */
+    .search-wrap { position:relative; flex-shrink:0; }
+    #searchInput {
+      padding:7px 12px 7px 34px; border-radius:20px;
+      border:1.5px solid rgba(255,255,255,.3); background:rgba(255,255,255,.12);
+      color:var(--white); font-size:13px; width:200px; outline:none; transition:all .2s;
+    }
+    #searchInput::placeholder { color:rgba(255,255,255,.5); }
+    #searchInput:focus { background:rgba(255,255,255,.2); border-color:var(--gold); width:240px; }
+    .search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:14px; color:rgba(255,255,255,.6); pointer-events:none; }
+
+    /* ─── SCROLL AREA ─── */
+    #scroll-area {
+      flex:1; overflow-y:auto; padding:16px 20px calc(var(--bottombar-h) + 16px);
+    }
+
+    /* ─── ALERT BANNER ─── */
+    #alertBanner {
+      background:linear-gradient(135deg,#7f1d1d,#b91c1c);
+      border-radius:10px; padding:12px 16px; margin-bottom:16px;
+      display:flex; align-items:flex-start; gap:12px; position:relative;
+    }
+    #alertBanner.hidden { display:none; }
+    .alert-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
+    .alert-body { flex:1; }
+    .alert-title { color:var(--white); font-weight:700; font-size:13.5px; margin-bottom:4px; }
+    .alert-names { color:rgba(255,255,255,.85); font-size:12.5px; line-height:1.6; }
+    .alert-names strong { color:var(--gold); }
+    #dismissAlert {
+      background:none; border:none; color:rgba(255,255,255,.7); font-size:18px;
+      cursor:pointer; padding:2px 6px; border-radius:4px; flex-shrink:0;
+    }
+    #dismissAlert:hover { color:var(--white); background:rgba(255,255,255,.15); }
+
+    /* ─── KPI CARDS ─── */
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:16px; }
+    .kpi-card {
+      background:var(--white); border-radius:12px; padding:16px 18px;
+      border-left:4px solid var(--blue); box-shadow:0 1px 4px rgba(0,0,0,.08);
+    }
+    .kpi-card.gold-card { border-left-color:var(--gold); }
+    .kpi-card.red-card  { border-left-color:var(--red); }
+    .kpi-card.green-card{ border-left-color:var(--green); }
+    .kpi-label { font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+    .kpi-value { font-size:22px; font-weight:800; color:var(--blue); line-height:1.1; }
+    .kpi-card.gold-card  .kpi-value { color:var(--gold-dk); }
+    .kpi-card.red-card   .kpi-value { color:var(--red); }
+    .kpi-card.green-card .kpi-value { color:var(--green); }
+    .kpi-sub { font-size:11.5px; color:var(--muted); margin-top:4px; }
+
+    /* ─── CHART GRID ─── */
+    .chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+    .chart-card { background:var(--white); border-radius:12px; padding:16px 18px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .chart-card h3 { font-size:13px; font-weight:700; color:var(--blue); margin-bottom:12px; }
+    .chart-wrap { position:relative; height:220px; }
+
+    /* ─── TABS & FILTERS ─── */
+    .filters-bar { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+    .filter-group { display:flex; gap:4px; }
+    .tab-btn {
+      padding:6px 14px; border-radius:20px; border:1.5px solid var(--blue-lt);
+      background:var(--white); color:var(--blue); font-size:12.5px; font-weight:600;
+      cursor:pointer; transition:all .15s;
+    }
+    .tab-btn:hover { border-color:var(--blue); }
+    .tab-btn.active { background:var(--blue); color:var(--white); border-color:var(--blue); }
+    .filter-sep { width:1px; height:28px; background:var(--blue-lt); margin:0 4px; }
+
+    /* ─── TABLE ─── */
+    .table-card { background:var(--white); border-radius:12px; padding:16px 18px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .table-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .table-header h3 { font-size:13px; font-weight:700; color:var(--blue); }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    thead th {
+      background:var(--blue); color:var(--white); padding:9px 10px;
+      text-align:left; font-weight:700; white-space:nowrap; font-size:12px;
+    }
+    thead th:first-child { border-radius:8px 0 0 0; }
+    thead th:last-child  { border-radius:0 8px 0 0; }
+    tbody tr { transition:background .1s; border-bottom:1px solid #e8eef4; }
+    tbody tr:hover { background:#f0f7ff; cursor:pointer; }
+    tbody tr.row-gold   { background:#fffde7; }
+    tbody tr.row-alert  { background:#fff5f5; }
+    tbody tr.row-hidden { display:none; }
+    tbody td { padding:8px 10px; vertical-align:middle; }
+    .rank-badge {
+      width:26px; height:26px; border-radius:50%; display:inline-flex;
+      align-items:center; justify-content:center; font-weight:800; font-size:12px;
+    }
+    .rank-1 { background:var(--gold); color:var(--blue); }
+    .rank-2 { background:#C0C0C0; color:#333; }
+    .rank-3 { background:#CD7F32; color:#fff; }
+    .rank-n { background:var(--blue-lt); color:var(--blue); }
+    .name-btn {
+      background:none; border:none; color:var(--blue-mid); font-weight:600;
+      cursor:pointer; text-align:left; font-size:12.5px; text-decoration:underline;
+      text-underline-offset:2px;
+    }
+    .name-btn:hover { color:var(--blue); }
+
+    /* PROGRESS BAR */
+    .prog-wrap { display:flex; align-items:center; gap:8px; min-width:120px; }
+    .prog-track { flex:1; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+    .prog-fill  { height:100%; border-radius:4px; transition:width .3s; }
+    .prog-fill.high   { background:var(--green); }
+    .prog-fill.mid    { background:var(--yellow); }
+    .prog-fill.low    { background:var(--red); }
+    .prog-pct { font-size:11px; color:var(--muted); width:32px; text-align:right; flex-shrink:0; }
+
+    .week-val { font-size:11.5px; }
+    .week-val.low-val { color:var(--red); font-weight:700; }
+
+    /* ─── RIGHT DRAWER ─── */
+    #drawerOverlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.35);
+      z-index:300; display:none;
+    }
+    #drawerOverlay.open { display:block; }
+    #rightDrawer {
+      position:fixed; top:0; right:-400px; width:380px; height:100vh;
+      background:var(--white); z-index:400; overflow-y:auto;
+      transition:right .3s ease; box-shadow:-4px 0 20px rgba(0,0,0,.15);
+      display:flex; flex-direction:column;
+    }
+    #rightDrawer.open { right:0; }
+    .drawer-header {
+      background:var(--blue); padding:20px 18px 16px;
+      display:flex; align-items:flex-start; justify-content:space-between;
+    }
+    .drawer-name  { color:var(--white); font-size:15px; font-weight:800; margin-bottom:2px; }
+    .drawer-rank  { color:var(--gold); font-size:12.5px; font-weight:600; }
+    #closeDrawer  {
+      background:none; border:none; color:rgba(255,255,255,.8); font-size:22px;
+      cursor:pointer; padding:2px 6px; border-radius:6px; line-height:1;
+    }
+    #closeDrawer:hover { background:rgba(255,255,255,.15); }
+    .drawer-body  { padding:16px 18px; flex:1; }
+    .drawer-kpi-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+    .drawer-kpi   { background:var(--bg); border-radius:8px; padding:10px 12px; }
+    .drawer-kpi-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+    .drawer-kpi-val   { font-size:18px; font-weight:800; color:var(--blue); }
+    .drawer-section   { margin-top:14px; }
+    .drawer-section h4 { font-size:12.5px; font-weight:700; color:var(--blue); margin-bottom:10px; text-transform:uppercase; letter-spacing:.4px; }
+    .drawer-prog-wrap  { margin-bottom:8px; }
+    .drawer-prog-label { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .drawer-chart-wrap { height:150px; position:relative; margin-top:4px; }
+    .week-list { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .week-chip {
+      background:var(--bg); border-radius:6px; padding:5px 4px;
+      text-align:center; font-size:11px;
+    }
+    .week-chip .wk-num  { color:var(--muted); font-size:10px; }
+    .week-chip .wk-val  { font-weight:700; color:var(--blue); margin-top:1px; }
+    .week-chip.wk-best  { background:#dcfce7; }
+    .week-chip.wk-best .wk-val { color:#15803d; }
+    .week-chip.wk-worst { background:#fee2e2; }
+    .week-chip.wk-worst .wk-val { color:var(--red); }
+
+    /* ─── BOTTOM ACTION BAR ─── */
+    #bottomBar {
+      position:fixed; bottom:0; left:var(--sidebar-w); right:0;
+      height:var(--bottombar-h); background:var(--blue);
+      display:flex; align-items:center; justify-content:flex-end;
+      padding:0 24px; gap:10px; z-index:100;
+      box-shadow:0 -2px 10px rgba(0,0,0,.2); transition:left .25s ease;
+    }
+    #bottomBar.expanded { left:56px; }
+    .bottom-btn {
+      padding:8px 18px; border-radius:20px; border:2px solid var(--gold);
+      background:transparent; color:var(--gold); font-size:13px; font-weight:700;
+      cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:6px;
+    }
+    .bottom-btn:hover { background:var(--gold); color:var(--blue); }
+    .bottom-btn.primary { background:var(--gold); color:var(--blue); }
+    .bottom-btn.primary:hover { background:var(--gold-dk); border-color:var(--gold-dk); }
+    .bottom-info { flex:1; color:rgba(255,255,255,.55); font-size:11.5px; }
+
+    /* ─── PAGE SECTIONS ─── */
+    .page-section { display:none; }
+    .page-section.active { display:block; }
+
+    /* PRESTASI PAGE */
+    .prestasi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+    .pelajar-card {
+      background:var(--white); border-radius:12px; padding:14px 16px;
+      box-shadow:0 1px 4px rgba(0,0,0,.08); cursor:pointer; transition:transform .15s,box-shadow .15s;
+      border-top:3px solid var(--blue);
+    }
+    .pelajar-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.12); }
+    .pelajar-card.rank-top { border-top-color:var(--gold); }
+    .pelajar-card.rank-alert { border-top-color:var(--red); }
+    .pc-name  { font-size:13px; font-weight:700; color:var(--blue); margin-bottom:2px; }
+    .pc-total { font-size:20px; font-weight:800; color:var(--blue); margin:6px 0 4px; }
+    .pc-avg   { font-size:11.5px; color:var(--muted); }
+
+    /* TREND PAGE */
+    .trend-chart-wrap { background:var(--white); border-radius:12px; padding:16px 18px; box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:14px; }
+    .trend-chart-wrap h3 { font-size:13px; font-weight:700; color:var(--blue); margin-bottom:12px; }
+    .trend-large { height:320px; position:relative; }
+
+    /* RANKING PAGE */
+    .ranking-list { display:flex; flex-direction:column; gap:10px; }
+    .ranking-item {
+      background:var(--white); border-radius:10px; padding:12px 16px;
+      display:flex; align-items:center; gap:14px;
+      box-shadow:0 1px 4px rgba(0,0,0,.07); cursor:pointer;
+    }
+    .ranking-item:hover { background:#f0f7ff; }
+    .ri-rank  { width:36px; flex-shrink:0; text-align:center; }
+    .ri-name  { flex:1; font-size:13.5px; font-weight:600; color:var(--blue); }
+    .ri-total { font-size:15px; font-weight:800; color:var(--blue); white-space:nowrap; }
+    .ri-avg   { font-size:11.5px; color:var(--muted); }
+    .ri-bar   { width:140px; }
+
+    /* SECTION TITLE */
+    .section-title { font-size:17px; font-weight:800; color:var(--blue); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+    .section-title span { background:var(--gold); color:var(--blue); border-radius:6px; padding:2px 10px; font-size:13px; }
+
+    /* RESPONSIVE */
+    @media (max-width:900px) {
+      .kpi-grid   { grid-template-columns:repeat(2,1fr); }
+      .chart-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width:600px) {
+      #sidebar { width:56px; }
+      #sidebar .nav-label,.sidebar-title,.sidebar-sub { display:none; }
+      #sidebar .nav-item { justify-content:center; padding:12px 0; }
+      #main-wrapper { margin-left:56px; }
+      #bottomBar { left:56px; }
+      .kpi-grid { grid-template-columns:1fr 1fr; }
+      #searchInput { width:140px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     1. LEFT SIDEBAR
+════════════════════════════════════════════════ -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">ST</div>
+    <div>
+      <div class="sidebar-title">Sales Tracker</div>
+      <div class="sidebar-sub">14 Minggu · 13 Pelajar</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-page="home">
+      <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" data-page="prestasi">
+      <span class="nav-icon">📊</span><span class="nav-label">Prestasi Pelajar</span>
+    </div>
+    <div class="nav-item" data-page="trend">
+      <span class="nav-icon">📈</span><span class="nav-label">Trend Mingguan</span>
+    </div>
+    <div class="nav-item" data-page="ranking">
+      <span class="nav-icon">🏆</span><span class="nav-label">Ranking</span>
+    </div>
+  </nav>
+</aside>
+
+<!-- ═══════════════════════════════════════════════
+     MAIN WRAPPER
+════════════════════════════════════════════════ -->
+<div id="main-wrapper">
+
+  <!-- ══════════════════════════════════════════
+       2. TOP NAVBAR  +  3. SEARCH BAR
+  ═══════════════════════════════════════════ -->
+  <nav id="navbar">
+    <button id="hamburger" title="Toggle Sidebar">☰</button>
+    <div style="flex:1;min-width:0;">
+      <div class="navbar-title">Sales Tracker Dashboard</div>
+      <div class="navbar-sub">Pn. Siti Aisyah Ahmad Razali &nbsp;|&nbsp; 14 Minggu · 13 Pelajar</div>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Cari nama pelajar…" autocomplete="off" />
+    </div>
+    <div class="navbar-date" id="navDate"></div>
+  </nav>
+
+  <!-- ══════════════════════════════════════════
+       SCROLLABLE CONTENT
+  ═══════════════════════════════════════════ -->
+  <div id="scroll-area">
+
+    <!-- ══ 6. ALERT BANNER ══ -->
+    <div id="alertBanner">
+      <span class="alert-icon">⚠️</span>
+      <div class="alert-body">
+        <div class="alert-title">Pelajar Memerlukan Perhatian — Rekod Jualan Rendah</div>
+        <div class="alert-names" id="alertNames"></div>
+      </div>
+      <button id="dismissAlert" title="Tutup">×</button>
+    </div>
+
+    <!-- ══════════════ HOME PAGE ══════════════ -->
+    <div id="page-home" class="page-section active">
+
+      <!-- 4 KPI CARDS -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">💰 Jumlah Jualan Kelas</div>
+          <div class="kpi-value">RM 27,070</div>
+          <div class="kpi-sub">14 minggu · 13 pelajar</div>
+        </div>
+        <div class="kpi-card gold-card">
+          <div class="kpi-label">🏆 Pelajar Terbaik</div>
+          <div class="kpi-value">RM 2,710</div>
+          <div class="kpi-sub">Ahmad Danish Bin Khairul Anwar</div>
+        </div>
+        <div class="kpi-card red-card">
+          <div class="kpi-label">⚠️ Perlukan Perhatian</div>
+          <div class="kpi-value">RM 1,190</div>
+          <div class="kpi-sub">Nurul Syafiqah Binti Ismail</div>
+        </div>
+        <div class="kpi-card green-card">
+          <div class="kpi-label">📊 Purata Per Pelajar</div>
+          <div class="kpi-value">RM 2,082</div>
+          <div class="kpi-sub">Purata mingguan: RM 148.73</div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>📊 Jumlah Jualan Per Pelajar (RM)</h3>
+          <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>📈 Trend Jualan Mingguan Kelas (RM)</h3>
+          <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 4. TABS & FILTERS + TABLE -->
+      <div class="table-card">
+        <div class="table-header">
+          <h3>📋 Senarai & Ranking Pelajar</h3>
+        </div>
+        <div class="filters-bar">
+          <div class="filter-group" id="weekTabs">
+            <button class="tab-btn active" data-weeks="all">Semua Minggu</button>
+            <button class="tab-btn" data-weeks="first">M1–M7</button>
+            <button class="tab-btn" data-weeks="second">M8–M14</button>
+          </div>
+          <div class="filter-sep"></div>
+          <div class="filter-group" id="prestTabGroup">
+            <button class="tab-btn active" data-filter="all">Semua</button>
+            <button class="tab-btn" data-filter="top5">Top 5</button>
+            <button class="tab-btn" data-filter="above">Atas Purata</button>
+            <button class="tab-btn" data-filter="below">Bawah Purata</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="mainTable">
+            <thead>
+              <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /home -->
+
+    <!-- ══════════════ PRESTASI PAGE ══════════════ -->
+    <div id="page-prestasi" class="page-section">
+      <div class="section-title">📊 Prestasi Pelajar <span>13 Pelajar</span></div>
+      <div class="prestasi-grid" id="prestasiGrid"></div>
+    </div>
+
+    <!-- ══════════════ TREND PAGE ══════════════ -->
+    <div id="page-trend" class="page-section">
+      <div class="section-title">📈 Trend Mingguan <span>Minggu 1–14</span></div>
+      <div class="trend-chart-wrap">
+        <h3>Jumlah Jualan Kelas Per Minggu (RM)</h3>
+        <div class="trend-large"><canvas id="trendChartBig"></canvas></div>
+      </div>
+      <div class="trend-chart-wrap">
+        <h3>Trend Individu Per Pelajar (RM)</h3>
+        <div style="height:380px;position:relative;"><canvas id="trendChartInd"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ RANKING PAGE ══════════════ -->
+    <div id="page-ranking" class="page-section">
+      <div class="section-title">🏆 Ranking Pelajar <span>Terbaik → Terendah</span></div>
+      <div class="ranking-list" id="rankingList"></div>
+    </div>
+
+  </div><!-- /scroll-area -->
+</div><!-- /main-wrapper -->
+
+<!-- ═══════════════════════════════════════════════
+     5. RIGHT DRAWER
+════════════════════════════════════════════════ -->
+<div id="drawerOverlay"></div>
+<div id="rightDrawer">
+  <div class="drawer-header">
+    <div>
+      <div class="drawer-name" id="drawerName">—</div>
+      <div class="drawer-rank" id="drawerRank">—</div>
+    </div>
+    <button id="closeDrawer">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-kpi-row">
+      <div class="drawer-kpi">
+        <div class="drawer-kpi-label">Jumlah Jualan</div>
+        <div class="drawer-kpi-val" id="drawerTotal">—</div>
+      </div>
+      <div class="drawer-kpi">
+        <div class="drawer-kpi-label">Purata Mingguan</div>
+        <div class="drawer-kpi-val" id="drawerAvg">—</div>
+      </div>
+    </div>
+    <div class="drawer-section">
+      <h4>Prestasi vs Purata Kelas</h4>
+      <div class="drawer-prog-wrap">
+        <div class="drawer-prog-label">
+          <span id="drawerVsLabel">—</span>
+          <span id="drawerVsPct">—</span>
+        </div>
+        <div class="prog-track" style="height:12px;border-radius:6px;">
+          <div class="prog-fill" id="drawerProgFill" style="width:0%;height:100%;border-radius:6px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="drawer-section">
+      <h4>Trend Jualan Individu</h4>
+      <div class="drawer-chart-wrap"><canvas id="drawerChart"></canvas></div>
+    </div>
+    <div class="drawer-section">
+      <h4>Jualan Per Minggu</h4>
+      <div class="week-list" id="drawerWeekList"></div>
+    </div>
+    <div class="drawer-section">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+        <div class="drawer-kpi" style="background:#dcfce7;">
+          <div class="drawer-kpi-label" style="color:#166534;">🌟 Minggu Terbaik</div>
+          <div class="drawer-kpi-val" id="drawerBestWeek" style="color:#15803d;font-size:14px;">—</div>
+        </div>
+        <div class="drawer-kpi" style="background:#fee2e2;">
+          <div class="drawer-kpi-label" style="color:#991b1b;">📉 Minggu Terendah</div>
+          <div class="drawer-kpi-val" id="drawerWorstWeek" style="color:var(--red);font-size:14px;">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     8. BOTTOM ACTION BAR
+════════════════════════════════════════════════ -->
+<div id="bottomBar">
+  <span class="bottom-info">Sales Tracker Dashboard · Pn. Siti Aisyah Ahmad Razali</span>
+  <button class="bottom-btn" id="btnExport">📥 Export CSV</button>
+  <button class="bottom-btn primary" id="btnPrint">🖨️ Print</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     JAVASCRIPT — DATA + LOGIC
+════════════════════════════════════════════════ -->
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────
+const WEEKS = 14;
+const CLASS_AVG = 2082.31;
+const WEEKLY_TOTALS = [1540,1990,1770,1960,1880,1965,1765,2185,1765,2090,2270,1730,2080,2080];
+
+const students = [
+  { name:"Adam Irfan Bin Shukri",             weeks:[100,120,140,150,130,125,115,195,105,120,190,100,185,150], total:1925, avg:137.50 },
+  { name:"Ahmad Danish Bin Khairul Anwar",    weeks:[145,205,200,170,190,170,200,200,220,230,215,205,180,180], total:2710, avg:193.57 },
+  { name:"Alya Sofea Binti Rahman",           weeks:[145,190,185,190,155,185,200,205,165,220,220,195,180,210], total:2645, avg:188.93 },
+  { name:"Mohd Haziq Bin Salleh",             weeks:[85,135,115,100,130,125,115,130,100,95,100,110,135,100],  total:1575, avg:112.50 },
+  { name:"Muhammad Afiq Bin Zulkifli",        weeks:[105,130,170,155,155,140,130,185,125,180,135,135,190,160],total:2095, avg:149.64 },
+  { name:"Muhammad Amirul Hakim Bin Roslan",  weeks:[90,135,135,80,140,105,120,140,90,135,165,90,80,115],    total:1620, avg:115.71 },
+  { name:"Muhammad Firdaus Bin Azman",        weeks:[135,210,140,205,160,165,175,195,160,210,180,160,150,190],total:2435, avg:173.93 },
+  { name:"Nur Aina Binti Abdullah",           weeks:[130,130,145,160,150,155,120,210,125,205,200,115,140,160],total:2145, avg:153.21 },
+  { name:"Nur Farah Nadia Binti Hassan",      weeks:[135,155,145,225,155,205,195,165,180,195,235,185,220,200],total:2595, avg:185.36 },
+  { name:"Nur Iman Balqis Binti Hamdan",      weeks:[110,130,65,100,125,150,95,105,120,90,120,95,120,140],   total:1565, avg:111.79 },
+  { name:"Nurul Syafiqah Binti Ismail",       weeks:[70,85,45,85,55,110,65,125,85,75,115,80,85,110],         total:1190, avg:85.00  },
+  { name:"Siti Hajar Binti Mohamad",          weeks:[110,190,130,180,180,145,110,170,120,185,195,95,195,175],total:2180, avg:155.71 },
+  { name:"Siti Nur Izzati Binti Mohd Zaki",   weeks:[180,175,155,160,155,185,125,160,170,150,200,165,220,190],total:2390, avg:170.71 },
+];
+
+// Sort by total descending → assign rank
+const ranked = [...students].sort((a,b)=>b.total-a.total);
+ranked.forEach((s,i)=>{ s.rank = i+1; });
+// Copy rank back to original array reference
+students.forEach(s=>{ s.rank = ranked.find(r=>r.name===s.name).rank; });
+
+const TOP_TOTAL = ranked[0].total; // 2710
+
+// Alert: students with any week < 100
+const alertStudents = students.filter(s=>s.weeks.some(w=>w<100));
+
+// ── UTILS ─────────────────────────────────────────────────────────────────
+function fmt(n){ return 'RM '+n.toLocaleString('ms-MY', {minimumFractionDigits:0}); }
+function shortName(name){ return name.split(' ')[0]; }
+function progClass(pct){ return pct>=75?'high':pct>=50?'mid':'low'; }
+
+function makeProgBar(total, showPct=true){
+  const pct = Math.round((total/TOP_TOTAL)*100);
+  const cls = progClass(pct);
+  return `<div class="prog-wrap">
+    <div class="prog-track"><div class="prog-fill ${cls}" style="width:${pct}%"></div></div>
+    ${showPct?`<span class="prog-pct">${pct}%</span>`:''}
+  </div>`;
+}
+
+// ── NAVBAR DATE ────────────────────────────────────────────────────────────
+document.getElementById('navDate').textContent =
+  new Date().toLocaleDateString('ms-MY',{day:'numeric',month:'short',year:'numeric'});
+
+// ── ALERT BANNER ──────────────────────────────────────────────────────────
+(function buildAlert(){
+  if(!alertStudents.length){ document.getElementById('alertBanner').classList.add('hidden'); return; }
+  const list = alertStudents.map(s=>{
+    const lowWeeks = s.weeks.map((w,i)=>w<100?`M${i+1}`:'').filter(Boolean);
+    return `<strong>${s.name}</strong> — ${lowWeeks.join(', ')} (< RM100)`;
+  }).join('<br>');
+  document.getElementById('alertNames').innerHTML = list;
+})();
+document.getElementById('dismissAlert').addEventListener('click',()=>{
+  document.getElementById('alertBanner').classList.add('hidden');
+});
+
+// ── SIDEBAR & HAMBURGER ───────────────────────────────────────────────────
+const sidebar     = document.getElementById('sidebar');
+const mainWrapper = document.getElementById('main-wrapper');
+const bottomBar   = document.getElementById('bottomBar');
+
+document.getElementById('hamburger').addEventListener('click',()=>{
+  sidebar.classList.toggle('collapsed');
+  mainWrapper.classList.toggle('expanded');
+  bottomBar.classList.toggle('expanded');
+});
+
+// ── PAGE NAVIGATION ───────────────────────────────────────────────────────
+const navItems = document.querySelectorAll('.nav-item[data-page]');
+navItems.forEach(item=>{
+  item.addEventListener('click',()=>{
+    navItems.forEach(n=>n.classList.remove('active'));
+    item.classList.add('active');
+    const page = item.dataset.page;
+    document.querySelectorAll('.page-section').forEach(s=>s.classList.remove('active'));
+    document.getElementById('page-'+page).classList.add('active');
+    if(page==='trend') renderTrendPage();
+    if(page==='ranking') renderRankingPage();
+    if(page==='prestasi') renderPrestasiPage();
+  });
+});
+
+// ── BUILD HOME TABLE ──────────────────────────────────────────────────────
+let currentWeekFilter = 'all';
+let currentPrestFilter = 'all';
+
+function getWeekRange(){
+  if(currentWeekFilter==='first')  return [0,6];
+  if(currentWeekFilter==='second') return [7,13];
+  return [0,13];
+}
+
+function renderTable(){
+  const [wStart,wEnd] = getWeekRange();
+  const head = document.getElementById('tableHead');
+  const body = document.getElementById('tableBody');
+
+  // Build header
+  let hHtml = '<th>#</th><th>Nama Pelajar</th>';
+  for(let w=wStart;w<=wEnd;w++) hHtml += `<th>M${w+1}</th>`;
+  hHtml += '<th>Jumlah</th><th>Purata</th><th style="min-width:140px;">Progress</th>';
+  head.innerHTML = hHtml;
+
+  // Filter students
+  let list = [...ranked];
+  if(currentPrestFilter==='top5')  list = list.slice(0,5);
+  if(currentPrestFilter==='above') list = list.filter(s=>s.total>=CLASS_AVG);
+  if(currentPrestFilter==='below') list = list.filter(s=>s.total<CLASS_AVG);
+
+  const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+
+  body.innerHTML = '';
+  ranked.forEach(s=>{
+    const visible = list.includes(s);
+    const matchSearch = !searchVal || s.name.toLowerCase().includes(searchVal);
+
+    const rankClass = s.rank===1?'rank-1':s.rank===2?'rank-2':s.rank===3?'rank-3':'rank-n';
+    const rowClass  = s.rank===1?'row-gold':alertStudents.includes(s)?'row-alert':'';
+    const hidden    = (!visible||!matchSearch)?'row-hidden':'';
+
+    // Week slice total & avg for filtered range
+    const sliceWeeks  = s.weeks.slice(wStart,wEnd+1);
+    const sliceTotal  = sliceWeeks.reduce((a,b)=>a+b,0);
+    const sliceAvg    = (sliceTotal/sliceWeeks.length).toFixed(2);
+
+    let weekCells = '';
+    sliceWeeks.forEach(w=>{
+      weekCells += `<td class="week-val${w<100?' low-val':''}">${w}</td>`;
+    });
+
+    const tr = `<tr class="${rowClass} ${hidden}" data-name="${s.name}">
+      <td><span class="rank-badge ${rankClass}">${s.rank}</span></td>
+      <td><button class="name-btn" data-name="${s.name}">${s.name}</button></td>
+      ${weekCells}
+      <td><strong>${fmt(sliceTotal)}</strong></td>
+      <td>RM ${sliceAvg}</td>
+      <td>${makeProgBar(s.total)}</td>
+    </tr>`;
+    body.innerHTML += tr;
+  });
+
+  // Attach drawer clicks
+  body.querySelectorAll('.name-btn').forEach(btn=>{
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
+      openDrawer(btn.dataset.name);
+    });
+  });
+  body.querySelectorAll('tr[data-name]').forEach(tr=>{
+    tr.addEventListener('click',()=>openDrawer(tr.dataset.name));
+  });
+}
+renderTable();
+
+// Week tabs
+document.getElementById('weekTabs').addEventListener('click',e=>{
+  const btn = e.target.closest('.tab-btn');
+  if(!btn) return;
+  document.querySelectorAll('#weekTabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentWeekFilter = btn.dataset.weeks;
+  renderTable();
+});
+
+// Prestasi filter
+document.getElementById('prestTabGroup').addEventListener('click',e=>{
+  const btn = e.target.closest('.tab-btn');
+  if(!btn) return;
+  document.querySelectorAll('#prestTabGroup .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentPrestFilter = btn.dataset.filter;
+  renderTable();
+});
+
+// Search
+document.getElementById('searchInput').addEventListener('input', renderTable);
+
+// ── HOME CHARTS ───────────────────────────────────────────────────────────
+const barColors = ranked.map(s=>s.rank===1?'#FFD700':'#1F4E79');
+const barChart = new Chart(document.getElementById('barChart'),{
+  type:'bar',
+  data:{
+    labels: ranked.map(s=>shortName(s.name)),
+    datasets:[{ data:ranked.map(s=>s.total), backgroundColor:barColors, borderRadius:5, borderSkipped:false }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false},
+      tooltip:{ callbacks:{ title:([i])=>ranked[i.dataIndex].name, label:i=>'RM '+i.raw.toLocaleString() }}
+    },
+    scales:{
+      x:{ ticks:{font:{size:11}} },
+      y:{ beginAtZero:true, ticks:{ callback:v=>'RM '+v.toLocaleString() }}
+    }
+  }
+});
+
+const lineChart = new Chart(document.getElementById('lineChart'),{
+  type:'line',
+  data:{
+    labels: Array.from({length:14},(_,i)=>`M${i+1}`),
+    datasets:[{
+      label:'Jumlah Kelas',
+      data:WEEKLY_TOTALS,
+      borderColor:'#1F4E79', backgroundColor:'rgba(31,78,121,.1)',
+      fill:true, tension:.35, pointBackgroundColor:'#FFD700', pointRadius:4
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false},
+      tooltip:{ callbacks:{ label:i=>'RM '+i.raw.toLocaleString() }}
+    },
+    scales:{
+      y:{ beginAtZero:false, ticks:{ callback:v=>'RM '+v.toLocaleString() }}
+    }
+  }
+});
+
+// ── RIGHT DRAWER ──────────────────────────────────────────────────────────
+let drawerChartInst = null;
+
+function openDrawer(name){
+  const s = students.find(st=>st.name===name);
+  if(!s) return;
+
+  document.getElementById('drawerName').textContent = s.name;
+  document.getElementById('drawerRank').textContent = `Ranking #${s.rank} daripada 13 pelajar`;
+  document.getElementById('drawerTotal').textContent = fmt(s.total);
+  document.getElementById('drawerAvg').textContent   = 'RM '+s.avg.toFixed(2);
+
+  const pct  = Math.round((s.total/TOP_TOTAL)*100);
+  const cls  = progClass(pct);
+  const fill = document.getElementById('drawerProgFill');
+  fill.style.width      = pct+'%';
+  fill.className        = 'prog-fill '+cls;
+  document.getElementById('drawerVsLabel').textContent = s.total>=CLASS_AVG?'Atas purata kelas ✅':'Bawah purata kelas ⚠️';
+  document.getElementById('drawerVsPct').textContent   = pct+'% daripada terbaik';
+
+  // Mini chart
+  if(drawerChartInst) drawerChartInst.destroy();
+  drawerChartInst = new Chart(document.getElementById('drawerChart'),{
+    type:'line',
+    data:{
+      labels:Array.from({length:14},(_,i)=>`M${i+1}`),
+      datasets:[{
+        label:'Jualan (RM)', data:s.weeks,
+        borderColor:'#1F4E79', backgroundColor:'rgba(31,78,121,.1)',
+        fill:true, tension:.35, pointBackgroundColor:'#FFD700', pointRadius:3
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{ beginAtZero:false, ticks:{font:{size:10}} },
+        x:{ ticks:{font:{size:10}} }
+      }
+    }
+  });
+
+  // Week chips
+  const maxW = Math.max(...s.weeks), minW = Math.min(...s.weeks);
+  document.getElementById('drawerWeekList').innerHTML = s.weeks.map((w,i)=>{
+    const cls2 = w===maxW?'wk-best':w===minW?'wk-worst':'';
+    return `<div class="week-chip ${cls2}"><div class="wk-num">M${i+1}</div><div class="wk-val">${w}</div></div>`;
+  }).join('');
+
+  const bestIdx  = s.weeks.indexOf(maxW);
+  const worstIdx = s.weeks.indexOf(minW);
+  document.getElementById('drawerBestWeek').textContent  = `Minggu ${bestIdx+1}: RM ${maxW}`;
+  document.getElementById('drawerWorstWeek').textContent = `Minggu ${worstIdx+1}: RM ${minW}`;
+
+  document.getElementById('rightDrawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer(){
+  document.getElementById('rightDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
+document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
+
+// ── PRESTASI PAGE ─────────────────────────────────────────────────────────
+function renderPrestasiPage(){
+  const grid = document.getElementById('prestasiGrid');
+  if(grid.innerHTML) return;
+  grid.innerHTML = ranked.map(s=>{
+    const isTop   = s.rank<=3;
+    const isAlert = alertStudents.includes(s);
+    const cardCls = isTop?'rank-top':isAlert?'rank-alert':'';
+    return `<div class="pelajar-card ${cardCls}" data-name="${s.name}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span class="rank-badge ${s.rank===1?'rank-1':s.rank===2?'rank-2':s.rank===3?'rank-3':'rank-n'}">${s.rank}</span>
+        <div class="pc-name">${s.name}</div>
+      </div>
+      <div class="pc-total">${fmt(s.total)}</div>
+      <div class="pc-avg">Purata: RM ${s.avg.toFixed(2)} / minggu</div>
+      <div style="margin-top:8px;">${makeProgBar(s.total)}</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.pelajar-card').forEach(card=>{
+    card.addEventListener('click',()=>openDrawer(card.dataset.name));
+  });
+}
+
+// ── TREND PAGE ────────────────────────────────────────────────────────────
+let trendBigInst = null, trendIndInst = null;
+const IND_COLORS = ['#1F4E79','#e67e22','#27ae60','#8e44ad','#c0392b','#2980b9','#16a085','#d35400','#7f8c8d','#2c3e50','#e74c3c','#1abc9c','#f39c12'];
+
+function renderTrendPage(){
+  if(trendBigInst && trendIndInst) return;
+
+  trendBigInst = new Chart(document.getElementById('trendChartBig'),{
+    type:'line',
+    data:{
+      labels:Array.from({length:14},(_,i)=>`Minggu ${i+1}`),
+      datasets:[{
+        label:'Jumlah Kelas (RM)', data:WEEKLY_TOTALS,
+        borderColor:'#1F4E79', backgroundColor:'rgba(31,78,121,.08)',
+        fill:true, tension:.35, pointBackgroundColor:'#FFD700', pointRadius:5, pointHoverRadius:7
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:i=>'RM '+i.raw.toLocaleString()}}},
+      scales:{ y:{ ticks:{callback:v=>'RM '+v.toLocaleString()} } }
+    }
+  });
+
+  trendIndInst = new Chart(document.getElementById('trendChartInd'),{
+    type:'line',
+    data:{
+      labels:Array.from({length:14},(_,i)=>`M${i+1}`),
+      datasets: students.map((s,i)=>({
+        label:shortName(s.name), data:s.weeks,
+        borderColor:IND_COLORS[i%IND_COLORS.length],
+        backgroundColor:'transparent',
+        tension:.35, pointRadius:2, borderWidth:1.5
+      }))
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{font:{size:11}, boxWidth:12, padding:10} },
+        tooltip:{callbacks:{label:i=>i.dataset.label+': RM '+i.raw}}
+      },
+      scales:{ y:{ ticks:{callback:v=>'RM '+v.toLocaleString()} } }
+    }
+  });
+}
+
+// ── RANKING PAGE ──────────────────────────────────────────────────────────
+function renderRankingPage(){
+  const list = document.getElementById('rankingList');
+  if(list.innerHTML) return;
+  list.innerHTML = ranked.map(s=>{
+    const badge = s.rank===1?'rank-1':s.rank===2?'rank-2':s.rank===3?'rank-3':'rank-n';
+    return `<div class="ranking-item" data-name="${s.name}">
+      <div class="ri-rank"><span class="rank-badge ${badge}">${s.rank}</span></div>
+      <div style="flex:1;">
+        <div class="ri-name">${s.name}</div>
+        <div class="ri-avg">Purata: RM ${s.avg.toFixed(2)} / minggu</div>
+      </div>
+      <div class="ri-total">${fmt(s.total)}</div>
+      <div class="ri-bar">${makeProgBar(s.total,true)}</div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.ranking-item').forEach(item=>{
+    item.addEventListener('click',()=>openDrawer(item.dataset.name));
+  });
+}
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────────
+document.getElementById('btnExport').addEventListener('click',()=>{
+  const headers = ['Ranking','Nama Pelajar',...Array.from({length:14},(_,i)=>`Minggu ${i+1}`),'Jumlah (RM)','Purata Mingguan (RM)'];
+  const rows = ranked.map(s=>[s.rank, s.name, ...s.weeks, s.total, s.avg.toFixed(2)]);
+  const csv  = [headers,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='Sales_Tracker_14Minggu.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── PRINT ─────────────────────────────────────────────────────────────────
+document.getElementById('btnPrint').addEventListener('click',()=>window.print());
+</script>
+</body>
+</html>
